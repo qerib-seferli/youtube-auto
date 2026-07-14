@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0a0d14">
+  <link rel="icon" href="./img/logo.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./app.css">
+  <title>AutoTube Studio</title>
+</head>
+<body>
+<div id="toast"></div>
+
+<section id="auth" class="auth">
+  <form id="authForm" class="auth-card">
+    <div class="brand"><img src="./img/logo.png"><div><b>AutoTube Studio</b><small>Multi-channel autopilot</small></div></div>
+    <span class="eyebrow">PRIVATE CONSOLE</span>
+    <h1>YouTube kanallarını avtomatlaşdır.</h1>
+    <p>Ssenari, səs, media, render, thumbnail və paylaşım bir sistemdə.</p>
+    <label>E-poçt<input id="email" type="email" required></label>
+    <label>Şifrə<input id="password" type="password" required minlength="6"></label>
+    <button id="loginBtn" class="primary">Daxil ol</button>
+    <button id="signupBtn" type="button" class="ghost">Hesab yarat</button>
+  </form>
+</section>
+
+<div id="app" class="app hidden">
+  <aside id="side">
+    <div class="brand"><img src="./img/logo.png"><div><b>AutoTube Studio</b><small>Automation console</small></div></div>
+    <nav>
+      <button data-view="overview" class="active">İcmal</button>
+      <button data-view="channels">Kanallar</button>
+      <button data-view="videos">Videolar</button>
+      <button data-view="events">Aktivlik</button>
+    </nav>
+    <button id="logoutBtn" class="ghost bottom">Çıxış</button>
+  </aside>
+
+  <main>
+    <header>
+      <button id="menuBtn" class="icon">☰</button>
+      <div><span class="eyebrow">OPERATIONS</span><h2 id="title">İcmal</h2></div>
+      <div class="actions"><button id="refreshBtn" class="ghost">Yenilə</button><button id="newVideoBtn" class="primary">+ Video</button></div>
+    </header>
+
+    <div class="content">
+      <section id="view-overview" class="view active">
+        <div class="metrics">
+          <article><span>Aktiv kanallar</span><b id="m1">0</b><small>Autopilot profilləri</small></article>
+          <article><span>Növbədə</span><b id="m2">0</b><small>Hazırlanan videolar</small></article>
+          <article><span>Upload hazır</span><b id="m3">0</b><small>YouTube gözləyir</small></article>
+          <article><span>Yayımlanıb</span><b id="m4">0</b><small>Uğurlu videolar</small></article>
+        </div>
+        <div class="dash">
+          <article class="panel wide"><h3>Son videolar</h3><div id="recent" class="empty">Video yoxdur.</div></article>
+          <article class="panel"><h3>Kanal rotasiyası</h3><div id="rotation" class="empty">Kanal yoxdur.</div></article>
+        </div>
+      </section>
+
+      <section id="view-channels" class="view">
+        <div class="toolbar"><div><span class="eyebrow">MULTI-CHANNEL</span><h3>Kanallar</h3><p>İstənilən dil və mövzuda profil əlavə et.</p></div><button id="newChannelBtn" class="primary">+ Kanal</button></div>
+        <div id="channels" class="cards empty">İlk kanalınızı əlavə edin.</div>
+      </section>
+
+      <section id="view-videos" class="view">
+        <div class="toolbar"><div><span class="eyebrow">PRODUCTION</span><h3>Video növbəsi</h3></div><select id="filter"><option value="">Bütün statuslar</option><option>pending</option><option>generating</option><option>rendering</option><option>ready</option><option>uploaded</option><option>failed</option></select></div>
+        <div id="videos" class="video-list empty">Video yoxdur.</div>
+      </section>
+
+      <section id="view-events" class="view">
+        <div class="toolbar"><div><span class="eyebrow">AUDIT</span><h3>Aktivlik</h3></div></div>
+        <div id="events" class="video-list empty">Hadisə yoxdur.</div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog id="channelDialog">
+<form id="channelForm" class="dialog-card">
+  <div class="dialog-head"><h3 id="channelDialogTitle">Yeni kanal</h3><button type="button" class="close icon">×</button></div>
+  <input id="channelId" type="hidden">
+  <div class="form-grid">
+    <label class="full">Kanal adı<input id="cName" required placeholder="Quiet Discipline"></label>
+    <label>Dil<select id="cLanguage"><option value="en">English</option><option value="tr">Türkçe</option><option value="az">Azərbaycan</option></select></label>
+    <label>Mövzu<select id="cNiche"><option value="motivation">Motivation</option><option value="meditation">Meditation</option><option value="kids_stories">Kids Stories</option><option value="education">Education</option><option value="history">History</option><option value="custom">Custom</option></select></label>
+    <label class="full">Xüsusi təlimat<input id="cPrompt" placeholder="Original discipline content"></label>
+    <label>Auditoriya<select id="cAudience"><option value="general">General</option><option value="kids">Kids</option></select></label>
+    <label>Timezone<input id="cTimezone" value="America/New_York"></label>
+    <label>Həftəlik long<input id="cLong" type="number" min="0" max="20" value="2"></label>
+    <label>Həftəlik Shorts<input id="cShort" type="number" min="0" max="40" value="3"></label>
+    <label>Long min dəqiqə<input id="cLongMin" type="number" value="7"></label>
+    <label>Long max dəqiqə<input id="cLongMax" type="number" value="10"></label>
+    <label>Short min saniyə<input id="cShortMin" type="number" value="35"></label>
+    <label>Short max saniyə<input id="cShortMax" type="number" value="55"></label>
+    <label>Səs provider<select id="cVoiceProvider"><option value="edge_tts">Edge-TTS</option><option value="elevenlabs">ElevenLabs</option></select></label>
+    <label>Səs ID<input id="cVoiceId" value="en-US-AriaNeural"></label>
+    <label>Privacy<select id="cPrivacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
+    <label>Prioritet<input id="cPriority" type="number" min="1" max="100" value="50"></label>
+    <label class="check full"><input id="cAuto" type="checkbox" checked> Auto Pilot aktiv</label>
+  </div>
+  <div class="dialog-actions"><button type="button" class="close ghost">Ləğv et</button><button class="primary">Yadda saxla</button></div>
+</form>
+</dialog>
+
+<dialog id="videoDialog">
+<form id="videoForm" class="dialog-card">
+  <div class="dialog-head"><h3>Yeni video</h3><button type="button" class="close icon">×</button></div>
+  <div class="form-grid">
+    <label class="full">Kanal<select id="vChannel"></select></label>
+    <label>Növ<select id="vType"><option value="long">Long</option><option value="short">Shorts</option></select></label>
+    <label>Paylaşım vaxtı<input id="vPublish" type="datetime-local"></label>
+    <label class="full">Mövzu — boş qala bilər<input id="vTopic"></label>
+  </div>
+  <div class="dialog-actions"><button type="button" class="close ghost">Ləğv et</button><button class="primary">Növbəyə əlavə et</button></div>
+</form>
+</dialog>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
