@@ -1,0 +1,4 @@
+worker/.env
+worker-data/
+*.log
+supabase/.temp/
