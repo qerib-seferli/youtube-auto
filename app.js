@@ -41,6 +41,63 @@ function openChannel(c={}){
  Object.entries(m).forEach(([k,v])=>$("#"+k).value=v);$("#cAuto").checked=c.autopilot??true;$("#channelDialog").showModal()
 }
 function payload(){return{name:$("#cName").value.trim(),language:$("#cLanguage").value,niche:$("#cNiche").value,custom_prompt:$("#cPrompt").value.trim()||null,audience_type:$("#cAudience").value,made_for_kids:$("#cAudience").value==="kids",timezone:$("#cTimezone").value,weekly_long_target:+$("#cLong").value,weekly_short_target:+$("#cShort").value,long_min_minutes:+$("#cLongMin").value,long_max_minutes:+$("#cLongMax").value,short_min_seconds:+$("#cShortMin").value,short_max_seconds:+$("#cShortMax").value,voice_provider:$("#cVoiceProvider").value,voice_id:$("#cVoiceId").value,privacy_status:$("#cPrivacy").value,priority:+$("#cPriority").value,autopilot:$("#cAuto").checked,active:true}}
+
+async function connectYouTube(channelId) {
+  const {
+    data: { session },
+    error: sessionError
+  } = await sb.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  if (!session?.access_token) {
+    throw new Error(
+      "Sessiya tapılmadı. Saytdan çıxıb yenidən daxil olun."
+    );
+  }
+
+  const response = await fetch(
+    `${URL}/functions/v1/automation`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": KEY
+      },
+
+      body: JSON.stringify({
+        action: "oauth_start",
+        channel_id: channelId,
+        return_url:
+          "https://qerib-seferli.github.io/youtube-auto/"
+      })
+    }
+  );
+
+  const result = await response
+    .json()
+    .catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      `OAuth başladılmadı. HTTP status: ${response.status}`
+    );
+  }
+
+  if (!result.url) {
+    throw new Error(
+      "Google OAuth ünvanı serverdən qaytarılmadı."
+    );
+  }
+
+  window.location.assign(result.url);
+}
+
 async function init(){
  if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js");
  const{data:{session}}=await sb.auth.getSession();$("#auth").classList.toggle("hidden",!!session);$("#app").classList.toggle("hidden",!session);if(session){view(location.hash.slice(1)||"overview");await load()}
@@ -55,7 +112,13 @@ async function init(){
   if(ed)openChannel(st.channels.find(x=>x.id===ed.dataset.edit));
   if(del&&confirm("Kanal silinsin?")){await sb.from("channels").delete().eq("id",del.dataset.delete);await load()}
   if(tg){let c=st.channels.find(x=>x.id===tg.dataset.toggle);await sb.from("channels").update({autopilot:!c.autopilot}).eq("id",c.id);await load()}
-  if(oa){let{data,error}=await sb.functions.invoke("automation",{body:{action:"oauth_start",channel_id:oa.dataset.oauth,return_url:location.href.split("?")[0]}});if(error)throw error;location.assign(data.url)}
+
+  if (oa) {
+    await connectYouTube(
+      oa.dataset.oauth
+    );
+  }
+  
  }catch(x){toast(x.message)}};
  sb.channel("ui").on("postgres_changes",{event:"*",schema:"public",table:"video_queue"},()=>load()).subscribe()
 }
