@@ -1,4 +1,4 @@
-name: OpenAI Content Generation Test
+name: Gemini Content Generation Test
 
 on:
   workflow_dispatch:
