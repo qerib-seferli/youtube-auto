@@ -64,7 +64,20 @@
       </section>
 
       <section id="view-videos" class="view">
-        <div class="toolbar"><div><span class="eyebrow">PRODUCTION</span><h3>Video növbəsi</h3></div><select id="filter"><option value="">Bütün statuslar</option><option>pending</option><option>generating</option><option>rendering</option><option>ready</option><option>uploaded</option><option>failed</option></select></div>
+        <div class="toolbar"><div><span class="eyebrow">PRODUCTION</span><h3>Video növbəsi</h3>
+        </div>
+          <select id="filter">
+            <option value="">Bütün statuslar</option>
+            <option value="pending">Növbədədir</option>
+            <option value="generating">Ssenari və media hazırlanır</option>
+            <option value="rendering">Video render olunur</option>
+            <option value="ready">Yükləməyə hazırdır</option>
+            <option value="uploading">YouTube-a yüklənir</option>
+            <option value="uploaded">Yayımlanıb</option>
+            <option value="failed">Xəta baş verdi</option>
+            <option value="cancelled">Ləğv edilib</option>
+          </select>
+        </div>
         <div id="videos" class="video-list empty">Video yoxdur.</div>
       </section>
 
