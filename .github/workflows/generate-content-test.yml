@@ -15,8 +15,8 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
 
     steps:
       - name: Repository-ni yüklə
@@ -38,8 +38,8 @@ jobs:
           required=(
             SUPABASE_URL
             SUPABASE_SERVICE_ROLE_KEY
-            OPENAI_API_KEY
-            OPENAI_MODEL
+            GEMINI_API_KEY
+            GEMINI_MODEL
           )
 
           for name in "${required[@]}"; do
