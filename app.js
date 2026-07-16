@@ -6,7 +6,26 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const st={channels:[],videos:[],events:[],filter:""};
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 const fmt=v=>v?new Intl.DateTimeFormat("az-AZ",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(v)):"—";
-const badge=s=>`<span class="badge ${esc(s)}">${esc(s||"pending")}</span>`;
+
+const statusLabels = {
+  pending: "Növbədədir",
+  generating: "Hazırlanır",
+  rendering: "Render olunur",
+  ready: "Upload hazırdır",
+  uploading: "YouTube-a yüklənir",
+  uploaded: "Yayımlanıb",
+  failed: "Xəta",
+  cancelled: "Ləğv edilib",
+  active: "Aktiv",
+  paused: "Dayandırılıb"
+};
+
+const badge = status => `
+  <span class="badge ${esc(status)}">
+    ${esc(statusLabels[status] || status || "Növbədədir")}
+  </span>
+`;
+
 function toast(m){let e=$("#toast");e.textContent=m;e.className="show";clearTimeout(window.t);window.t=setTimeout(()=>e.className="",3000)}
 function view(n){$$("aside nav button").forEach(x=>x.classList.toggle("active",x.dataset.view===n));$$(".view").forEach(x=>x.classList.toggle("active",x.id===`view-${n}`));$("#title").textContent={overview:"İcmal",channels:"Kanallar",videos:"Videolar",events:"Aktivlik"}[n];history.replaceState({},"",`#${n}`)}
 async function load(){
