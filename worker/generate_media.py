@@ -291,19 +291,64 @@ def create_procedural_ambient_audio(
     duration: float,
 ) -> None:
     """
-    Hazır mahnı istifadə etmir.
+    Hazır mahnı və üçüncü tərəf audio istifadə etmir.
 
-    FFmpeg ilə sıfırdan eşidilən, yumşaq ambient akkord yaradır:
-    - xışıltı yoxdur;
-    - üç harmonik ton var;
-    - səs çox zəif qalmır;
-    - başlanğıc və son yumşaqdır;
-    - üçüncü tərəf musiqisi istifadə edilmir.
+    FFmpeg ilə sıfırdan normal səs səviyyəli stereo ambient audio yaradır:
+    - xışıltı və pink noise yoxdur;
+    - yumşaq harmonik ambient akkord var;
+    - sol və sağ kanallar bir qədər fərqlidir;
+    - normal MP3 mahnı səviyyəsinə normallaşdırılır;
+    - dinləyici səsi YouTube-dan özü azaldıb-artıra bilər.
+
+    Səs hədəfi:
+    - Integrated loudness: təxminən -14 LUFS
+    - True peak: maksimum -1 dB
     """
+
+    if duration <= 0:
+        raise ValueError(
+            "Ambient audio müddəti sıfırdan böyük olmalıdır."
+        )
+
+    # Qısa videolarda fade bütün səsi yeməsin deyə
+    # müddətə uyğun avtomatik hesablanır.
+    fade_in_duration = min(
+        4.0,
+        max(0.8, duration * 0.04),
+    )
+
+    fade_out_duration = min(
+        5.0,
+        max(0.8, duration * 0.05),
+    )
 
     fade_out_start = max(
         0.0,
-        duration - 6.0,
+        duration - fade_out_duration,
+    )
+
+    # Sol və sağ kanalda cüzi fərqli tezliklər istifadə olunur.
+    # Bu, sadə mono sinus əvəzinə daha geniş stereo hiss yaradır.
+    left_channel = (
+        "0.38*sin(2*PI*130.81*t)"
+        "*(0.82+0.18*sin(2*PI*0.055*t))"
+        "+"
+        "0.24*sin(2*PI*196.00*t)"
+        "*(0.84+0.16*sin(2*PI*0.071*t))"
+        "+"
+        "0.16*sin(2*PI*261.63*t)"
+        "*(0.86+0.14*sin(2*PI*0.043*t))"
+    )
+
+    right_channel = (
+        "0.38*sin(2*PI*131.25*t)"
+        "*(0.82+0.18*sin(2*PI*0.061*t))"
+        "+"
+        "0.24*sin(2*PI*196.65*t)"
+        "*(0.84+0.16*sin(2*PI*0.067*t))"
+        "+"
+        "0.16*sin(2*PI*262.20*t)"
+        "*(0.86+0.14*sin(2*PI*0.047*t))"
     )
 
     run(
@@ -311,96 +356,71 @@ def create_procedural_ambient_audio(
             "ffmpeg",
             "-y",
 
-            # Aşağı ambient ton
+            # Stereo ambient səs sıfırdan yaradılır.
             "-f",
             "lavfi",
             "-i",
             (
-                "sine="
-                "frequency=130.81:"
-                f"duration={duration:.3f}:"
-                "sample_rate=48000"
+                "aevalsrc="
+                f"exprs='{left_channel}|{right_channel}':"
+                "s=48000:"
+                f"d={duration:.3f}:"
+                "c=stereo"
             ),
 
-            # Orta ambient ton
-            "-f",
-            "lavfi",
-            "-i",
+            "-af",
             (
-                "sine="
-                "frequency=196.00:"
-                f"duration={duration:.3f}:"
-                "sample_rate=48000"
-            ),
+                # Lazımsız çox aşağı tezlikləri təmizləyir.
+                "highpass=f=55,"
 
-            # Yuxarı harmonik ton
-            "-f",
-            "lavfi",
-            "-i",
-            (
-                "sine="
-                "frequency=261.63:"
-                f"duration={duration:.3f}:"
-                "sample_rate=48000"
-            ),
+                # Sərt yüksək tezlikləri yumşaldır.
+                "lowpass=f=3200,"
 
-            "-filter_complex",
-            (
-                # Əsas ton daha aydın eşidilir
-                "[0:a]"
-                "volume=0.20,"
-                "lowpass=f=500"
-                "[tone1];"
-
-                # Orta ton
-                "[1:a]"
-                "volume=0.12,"
-                "lowpass=f=700"
-                "[tone2];"
-
-                # Yuxarı ton
-                "[2:a]"
-                "volume=0.07,"
-                "lowpass=f=900"
-                "[tone3];"
-
-                # Tonlar birləşdirilir
-                "[tone1][tone2][tone3]"
-                "amix=inputs=3:"
-                "duration=longest:"
-                "normalize=0,"
-
-                # Yumşaq əks-səda
+                # Yumşaq ambient əks-səda əlavə edir.
                 "aecho="
-                "in_gain=0.75:"
-                "out_gain=0.65:"
-                "delays=700|1400:"
+                "in_gain=0.82:"
+                "out_gain=0.72:"
+                "delays=650|1300:"
                 "decays=0.22|0.10,"
 
-                # Başlanğıc və son yumşaldılır
-                "afade=t=in:st=0:d=5,"
-                f"afade=t=out:st={fade_out_start:.3f}:d=6,"
+                # Videonun başlanğıcını yumşaldır.
+                "afade="
+                "t=in:"
+                "st=0:"
+                f"d={fade_in_duration:.3f},"
 
-                # Səsin həddən artıq yüksəlməsinin qarşısını alır
-                "alimiter=limit=0.75,"
+                # Videonun sonunu yumşaldır.
+                "afade="
+                "t=out:"
+                f"st={fade_out_start:.3f}:"
+                f"d={fade_out_duration:.3f},"
 
-                # Son ümumi səviyyə
-                "volume=1.7"
-                "[ambient]"
+                # Normal mahnı səviyyəsinə gətirir.
+                "loudnorm="
+                "I=-14:"
+                "LRA=7:"
+                "TP=-1.0,"
+
+                # Ani yüksək piklərin qarşısını alır.
+                "alimiter=limit=0.95"
             ),
 
-            "-map",
-            "[ambient]",
             "-t",
             f"{duration:.3f}",
-            "-ar",
-            "48000",
+
+            # Normal stereo MP3.
             "-ac",
             "2",
+
+            "-ar",
+            "48000",
+
             "-c:a",
             "libmp3lame",
+
             "-b:a",
             "192k",
+
             str(output_path),
         ]
     )
@@ -411,6 +431,92 @@ def create_procedural_ambient_audio(
     ):
         raise RuntimeError(
             "Ambient audio yaradılmadı və ya fayl boşdur."
+        )
+
+    # Yaranan səsin həqiqətən səssiz olmadığını yoxlayır.
+    check = subprocess.run(
+        [
+            "ffmpeg",
+            "-i",
+            str(output_path),
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        text=True,
+        capture_output=True,
+    )
+
+    volume_log = check.stderr
+
+    mean_match = re.search(
+        r"mean_volume:\s*(-?[\d.]+)\s*dB",
+        volume_log,
+    )
+
+    max_match = re.search(
+        r"max_volume:\s*(-?[\d.]+)\s*dB",
+        volume_log,
+    )
+
+    mean_volume = (
+        float(mean_match.group(1))
+        if mean_match
+        else None
+    )
+
+    max_volume = (
+        float(max_match.group(1))
+        if max_match
+        else None
+    )
+
+    print(
+        "Ambient audio uğurla yaradıldı:",
+        output_path,
+        flush=True,
+    )
+
+    print(
+        "Orta səs səviyyəsi:",
+        (
+            f"{mean_volume} dB"
+            if mean_volume is not None
+            else "ölçülmədi"
+        ),
+        flush=True,
+    )
+
+    print(
+        "Maksimum səs səviyyəsi:",
+        (
+            f"{max_volume} dB"
+            if max_volume is not None
+            else "ölçülmədi"
+        ),
+        flush=True,
+    )
+
+    # Fayl texniki olaraq yaransa da praktik olaraq səssizdirsə
+    # workflow uğurlu görünməsin.
+    if (
+        mean_volume is not None
+        and mean_volume < -35
+    ):
+        raise RuntimeError(
+            "Ambient audio yaradıldı, amma səs səviyyəsi "
+            f"çox aşağıdır: {mean_volume} dB."
+        )
+
+    if (
+        max_volume is not None
+        and max_volume < -10
+    ):
+        raise RuntimeError(
+            "Ambient audio maksimum səs səviyyəsi "
+            f"çox aşağıdır: {max_volume} dB."
         )
 
 
