@@ -259,25 +259,57 @@ async def create_voice(
     voice_id: str,
     output_path: Path,
 ) -> None:
-    communication = edge_tts.Communicate(
-        text=text,
-        voice=voice_id,
-        rate="-2%",
-        volume="+0%",
-        pitch="+0Hz",
-    )
+    last_error: Exception | None = None
 
-    await communication.save(
-        str(output_path)
-    )
+    for attempt in range(1, 4):
+        try:
+            if output_path.exists():
+                output_path.unlink()
 
-    if (
-        not output_path.exists()
-        or output_path.stat().st_size < 1000
-    ):
-        raise RuntimeError(
-            "Edge TTS etibarlı audio yaratmadı."
-        )
+            print(
+                f"Edge TTS səs cəhdi: {attempt}/3",
+                flush=True,
+            )
+
+            communication = edge_tts.Communicate(
+                text=text,
+                voice=voice_id,
+                rate="-2%",
+                volume="+0%",
+                pitch="+0Hz",
+            )
+
+            await communication.save(
+                str(output_path)
+            )
+
+            if (
+                not output_path.exists()
+                or output_path.stat().st_size < 1000
+            ):
+                raise RuntimeError(
+                    "Edge TTS boş və ya natamam audio yaratdı."
+                )
+
+            return
+
+        except Exception as error:
+            last_error = error
+
+            print(
+                f"Edge TTS cəhdi uğursuz oldu: {error}",
+                flush=True,
+            )
+
+            if attempt < 3:
+                await asyncio.sleep(
+                    attempt * 5
+                )
+
+    raise RuntimeError(
+        "Edge TTS 3 cəhddən sonra səs yarada bilmədi. "
+        f"Son xəta: {last_error}"
+    )
 
 
 def download_file(
