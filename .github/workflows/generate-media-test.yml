@@ -1,0 +1,106 @@
+name: Media Generation Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-media:
+    name: Generate voice, visuals and test video
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+
+      # İlk test vaxt itirməsin deyə maksimum 8 səhnə.
+      MAX_MEDIA_TEST_SCENES: "8"
+
+      MEDIA_OUTPUT_DIR: media-test-output
+
+    steps:
+      - name: Repository-ni yüklə
+        uses: actions/checkout@v4
+
+      - name: Python-u hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: FFmpeg və fontları quraşdır
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ffmpeg \
+            fonts-dejavu-core \
+            libass9
+
+      - name: Python paketlərini quraşdır
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r worker/requirements.txt
+
+      - name: Secret-ləri yoxla
+        shell: bash
+        run: |
+          required=(
+            SUPABASE_URL
+            SUPABASE_SERVICE_ROLE_KEY
+            PEXELS_API_KEY
+          )
+
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name secret boşdur"
+              exit 1
+            fi
+          done
+
+          echo "Bütün media secret-ləri mövcuddur."
+
+      - name: FFmpeg imkanlarını yoxla
+        shell: bash
+        run: |
+          ffmpeg -version
+          ffmpeg -filters | grep subtitles
+
+      - name: Səs, görüntü və test videosu yarat
+        run: python worker/generate_media.py
+
+      - name: Hazır media fayllarını göstər
+        if: success()
+        shell: bash
+        run: |
+          echo "Yaradılmış fayllar:"
+          find media-test-output \
+            -maxdepth 2 \
+            -type f \
+            -printf "%p %k KB\n"
+
+      - name: Test videosunu artifact kimi saxla
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autotube-media-test
+          path: |
+            media-test-output/final.mp4
+            media-test-output/audio.mp3
+            media-test-output/subtitles.srt
+            media-test-output/sources.txt
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Xəta zamanı iş fayllarını saxla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autotube-media-debug
+          path: |
+            media-test-output/
+          if-no-files-found: ignore
+          retention-days: 1
