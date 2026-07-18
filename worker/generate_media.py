@@ -293,16 +293,13 @@ def create_procedural_ambient_audio(
     """
     Hazır mahnı və üçüncü tərəf audio istifadə etmir.
 
-    FFmpeg ilə sıfırdan normal səs səviyyəli stereo ambient audio yaradır:
-    - xışıltı və pink noise yoxdur;
-    - yumşaq harmonik ambient akkord var;
-    - sol və sağ kanallar bir qədər fərqlidir;
-    - normal MP3 mahnı səviyyəsinə normallaşdırılır;
-    - dinləyici səsi YouTube-dan özü azaldıb-artıra bilər.
-
-    Səs hədəfi:
-    - Integrated loudness: təxminən -14 LUFS
-    - True peak: maksimum -1 dB
+    FFmpeg ilə sıfırdan normal səsli meditasiya ambienti yaradır:
+    - aşağı tezliklərə ilişib qalmır;
+    - telefon və laptop dinamikində aydın eşidilir;
+    - dörd harmonik ton birləşdirilir;
+    - yumşaq əks-səda əlavə olunur;
+    - normal musiqi səviyyəsinə gətirilir;
+    - MP3 stereo, 48 kHz, 192 kbps olur.
     """
 
     if duration <= 0:
@@ -310,16 +307,14 @@ def create_procedural_ambient_audio(
             "Ambient audio müddəti sıfırdan böyük olmalıdır."
         )
 
-    # Qısa videolarda fade bütün səsi yeməsin deyə
-    # müddətə uyğun avtomatik hesablanır.
     fade_in_duration = min(
         4.0,
-        max(0.8, duration * 0.04),
+        max(1.0, duration * 0.03),
     )
 
     fade_out_duration = min(
         5.0,
-        max(0.8, duration * 0.05),
+        max(1.0, duration * 0.04),
     )
 
     fade_out_start = max(
@@ -327,88 +322,136 @@ def create_procedural_ambient_audio(
         duration - fade_out_duration,
     )
 
-    # Sol və sağ kanalda cüzi fərqli tezliklər istifadə olunur.
-    # Bu, sadə mono sinus əvəzinə daha geniş stereo hiss yaradır.
-    left_channel = (
-        "0.38*sin(2*PI*130.81*t)"
-        "*(0.82+0.18*sin(2*PI*0.055*t))"
-        "+"
-        "0.24*sin(2*PI*196.00*t)"
-        "*(0.84+0.16*sin(2*PI*0.071*t))"
-        "+"
-        "0.16*sin(2*PI*261.63*t)"
-        "*(0.86+0.14*sin(2*PI*0.043*t))"
-    )
-
-    right_channel = (
-        "0.38*sin(2*PI*131.25*t)"
-        "*(0.82+0.18*sin(2*PI*0.061*t))"
-        "+"
-        "0.24*sin(2*PI*196.65*t)"
-        "*(0.84+0.16*sin(2*PI*0.067*t))"
-        "+"
-        "0.16*sin(2*PI*262.20*t)"
-        "*(0.86+0.14*sin(2*PI*0.047*t))"
-    )
-
     run(
         [
             "ffmpeg",
             "-y",
 
-            # Stereo ambient səs sıfırdan yaradılır.
+            # Əsas ton — A3
             "-f",
             "lavfi",
             "-i",
             (
-                "aevalsrc="
-                f"exprs='{left_channel}|{right_channel}':"
-                "s=48000:"
-                f"d={duration:.3f}:"
-                "c=stereo"
+                "sine="
+                "frequency=220:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
             ),
 
-            "-af",
+            # Akkordun ikinci tonu — C#4
+            "-f",
+            "lavfi",
+            "-i",
             (
-                # Lazımsız çox aşağı tezlikləri təmizləyir.
-                "highpass=f=55,"
+                "sine="
+                "frequency=277.18:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
 
-                # Sərt yüksək tezlikləri yumşaldır.
-                "lowpass=f=3200,"
+            # Akkordun üçüncü tonu — E4
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=329.63:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
 
-                # Yumşaq ambient əks-səda əlavə edir.
+            # Yumşaq yuxarı harmonik — A4
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=440:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
+            "-filter_complex",
+            (
+                # Əsas ton
+                "[0:a]"
+                "volume=0.42,"
+                "lowpass=f=1600"
+                "[tone1];"
+
+                # İkinci ton
+                "[1:a]"
+                "volume=0.30,"
+                "lowpass=f=1900"
+                "[tone2];"
+
+                # Üçüncü ton
+                "[2:a]"
+                "volume=0.24,"
+                "lowpass=f=2200"
+                "[tone3];"
+
+                # Yuxarı harmonik
+                "[3:a]"
+                "volume=0.12,"
+                "lowpass=f=2600"
+                "[tone4];"
+
+                # Bütün tonları birləşdirir
+                "[tone1][tone2][tone3][tone4]"
+                "amix="
+                "inputs=4:"
+                "duration=longest:"
+                "normalize=0,"
+
+                # Mono akkordu stereo məkana yayır
+                "aformat="
+                "sample_fmts=fltp:"
+                "sample_rates=48000:"
+                "channel_layouts=stereo,"
+
+                # Yumşaq meditasiya əks-sədası
                 "aecho="
                 "in_gain=0.82:"
-                "out_gain=0.72:"
-                "delays=650|1300:"
-                "decays=0.22|0.10,"
+                "out_gain=0.62:"
+                "delays=480|960:"
+                "decays=0.18|0.08,"
 
-                # Videonun başlanğıcını yumşaldır.
+                # Çox aşağı və eşidilməyən tezlikləri təmizləyir
+                "highpass=f=90,"
+
+                # Sərt yüksək tezlikləri yumşaldır
+                "lowpass=f=3200,"
+
+                # Başlanğıcı yumşaldır
                 "afade="
                 "t=in:"
                 "st=0:"
                 f"d={fade_in_duration:.3f},"
 
-                # Videonun sonunu yumşaldır.
+                # Sonu yumşaldır
                 "afade="
                 "t=out:"
                 f"st={fade_out_start:.3f}:"
                 f"d={fade_out_duration:.3f},"
 
-                # Normal mahnı səviyyəsinə gətirir.
+                # Normal mahnı səviyyəsi
                 "loudnorm="
                 "I=-14:"
                 "LRA=7:"
                 "TP=-1.0,"
 
-                # Ani yüksək piklərin qarşısını alır.
+                # Ani piklərin qarşısını alır
                 "alimiter=limit=0.95"
+                "[ambient]"
             ),
+
+            "-map",
+            "[ambient]",
 
             "-t",
             f"{duration:.3f}",
 
-            # Normal stereo MP3.
             "-ac",
             "2",
 
@@ -433,10 +476,11 @@ def create_procedural_ambient_audio(
             "Ambient audio yaradılmadı və ya fayl boşdur."
         )
 
-    # Yaranan səsin həqiqətən səssiz olmadığını yoxlayır.
+    # Real səs səviyyəsini ölçür.
     check = subprocess.run(
         [
             "ffmpeg",
+            "-hide_banner",
             "-i",
             str(output_path),
             "-af",
@@ -499,24 +543,22 @@ def create_procedural_ambient_audio(
         flush=True,
     )
 
-    # Fayl texniki olaraq yaransa da praktik olaraq səssizdirsə
-    # workflow uğurlu görünməsin.
     if (
         mean_volume is not None
-        and mean_volume < -35
+        and mean_volume < -24
     ):
         raise RuntimeError(
-            "Ambient audio yaradıldı, amma səs səviyyəsi "
-            f"çox aşağıdır: {mean_volume} dB."
+            "Ambient audio səsi gözləniləndən aşağıdır: "
+            f"{mean_volume} dB."
         )
 
     if (
         max_volume is not None
-        and max_volume < -10
+        and max_volume < -6
     ):
         raise RuntimeError(
-            "Ambient audio maksimum səs səviyyəsi "
-            f"çox aşağıdır: {max_volume} dB."
+            "Ambient audio maksimum səviyyəsi aşağıdır: "
+            f"{max_volume} dB."
         )
 
 
