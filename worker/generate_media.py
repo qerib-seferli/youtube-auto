@@ -286,45 +286,111 @@ async def create_voice(
     raise RuntimeError(f"Edge TTS səs yarada bilmədi: {last_error}")
 
 
-def create_ambient_audio(output_path: Path, duration: float) -> None:
+def create_procedural_ambient_audio(
+    output_path: Path,
+    duration: float,
+) -> None:
     """
-    Hazır musiqi götürmür.
-    FFmpeg pink noise və yumşaq sinus tonlarından yeni ambient audio yaradır.
-    """
-    fade_out = max(0.0, duration - 5)
+    Heç bir hazır musiqidən istifadə etmir.
 
-    run([
-        "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", (
-            "anoisesrc=color=pink:amplitude=0.018:"
-            f"duration={duration:.3f}:sample_rate=48000"
-        ),
-        "-f", "lavfi",
-        "-i", (
-            "sine=frequency=174:"
-            f"duration={duration:.3f}:sample_rate=48000"
-        ),
-        "-f", "lavfi",
-        "-i", (
-            "sine=frequency=261.63:"
-            f"duration={duration:.3f}:sample_rate=48000"
-        ),
-        "-filter_complex",
-        (
-            "[0:a]highpass=f=55,lowpass=f=900,volume=0.30[noise];"
-            "[1:a]volume=0.025,tremolo=f=0.08:d=0.35[t1];"
-            "[2:a]volume=0.014,tremolo=f=0.05:d=0.25[t2];"
-            "[noise][t1][t2]amix=inputs=3:normalize=0,"
-            "afade=t=in:st=0:d=4,"
-            f"afade=t=out:st={fade_out:.3f}:d=5,"
-            "loudnorm=I=-24:LRA=7:TP=-2[ambient]"
-        ),
-        "-map", "[ambient]",
-        "-c:a", "libmp3lame",
-        "-b:a", "192k",
-        str(output_path),
-    ])
+    FFmpeg vasitəsilə sıfırdan:
+    - yumşaq pink noise;
+    - aşağı tezlikli ambient ton;
+    - yüngül yüksək ambient ton yaradılır.
+
+    Hazır mahnı və ya üçüncü tərəf audio faylı istifadə edilmədiyi
+    üçün başqa şəxsin musiqisini kopyalamır.
+    """
+
+    fade_out_start = max(
+        0.0,
+        duration - 5.0,
+    )
+
+    run(
+        [
+            "ffmpeg",
+            "-y",
+
+            # Yumşaq fon səsi
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "anoisesrc="
+                "color=pink:"
+                "amplitude=0.018:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
+            # Aşağı və sakit ambient ton
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=174:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
+            # Çox zəif əlavə harmonik ton
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=261.63:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
+            "-filter_complex",
+            (
+                # Pink noise yumşaldılır
+                "[0:a]"
+                "highpass=f=55,"
+                "lowpass=f=900,"
+                "volume=0.30"
+                "[noise];"
+
+                # Aşağı ton çox zəif səviyyəyə salınır
+                "[1:a]"
+                "volume=0.022"
+                "[tone1];"
+
+                # İkinci ton daha da zəiflədilir
+                "[2:a]"
+                "volume=0.012"
+                "[tone2];"
+
+                # Üç səs birləşdirilir
+                "[noise][tone1][tone2]"
+                "amix=inputs=3:"
+                "duration=longest:"
+                "normalize=0,"
+
+                # Başlanğıc və son yumşaldılır
+                "afade=t=in:st=0:d=4,"
+                f"afade=t=out:st={fade_out_start:.3f}:d=5,"
+
+                # Ümumi səs səviyyəsi tənzimlənir
+                "loudnorm=I=-24:LRA=7:TP=-2"
+                "[ambient]"
+            ),
+
+            "-map",
+            "[ambient]",
+            "-t",
+            f"{duration:.3f}",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "192k",
+            str(output_path),
+        ]
+    )
 
 
 def download_file(url: str, destination: Path) -> None:
