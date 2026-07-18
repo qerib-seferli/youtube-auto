@@ -45,6 +45,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r worker/requirements.txt
 
+      - name: Edge TTS versiyasını yoxla
+        shell: bash
+        run: |
+          python -c "import importlib.metadata; print('edge-tts:', importlib.metadata.version('edge-tts'))"
+          
       - name: Secret-ləri yoxla
         shell: bash
         run: |
