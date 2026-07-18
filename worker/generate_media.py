@@ -930,7 +930,7 @@ async def create_media(supabase, video: dict[str, Any]) -> Path:
     concat_videos(video_files, visual)
 
     if profile == "meditation":
-        create_ambient_audio(audio, current_time)
+        create_procedural_ambient_audio(audio, current_time)
         subtitles.write_text("", encoding="utf-8")
     else:
         concat_audio(audio_files, audio)
