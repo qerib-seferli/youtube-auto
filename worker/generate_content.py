@@ -3,7 +3,7 @@ import os
 import sys
 from typing import Any
 from urllib.parse import quote
-  
+
 import requests
 from supabase import create_client
 
@@ -83,15 +83,27 @@ def build_prompt(
             f"{channel['short_min_seconds']}–"
             f"{channel['short_max_seconds']} seconds"
         )
+
+        scene_instruction = """
+Create 4 to 8 scenes.
+Each scene should normally contain 5 to 12 seconds of narration.
+The complete video must remain suitable for a YouTube Short.
+""".strip()
     else:
         duration = (
             f"{channel['long_min_minutes']}–"
             f"{channel['long_max_minutes']} minutes"
         )
 
+        scene_instruction = """
+Create enough scenes to cover the requested duration naturally.
+Normally create between 12 and 30 scenes.
+Each scene should normally contain 12 to 30 seconds of narration.
+""".strip()
+
     requested_topic = (
         video.get("topic")
-        or "Choose an original topic yourself"
+        or "Choose an original evergreen topic yourself"
     )
 
     output_language = language_name(
@@ -99,7 +111,8 @@ def build_prompt(
     )
 
     return f"""
-You are a professional YouTube content strategist and script writer.
+You are a professional YouTube content strategist,
+script writer and visual director.
 
 Create completely original YouTube content for the channel below.
 
@@ -117,18 +130,29 @@ IMPORTANT RULES
 - Write all viewer-facing content in {output_language}.
 - Create original content only.
 - Do not copy existing videos, titles, scripts or descriptions.
-- Do not use deceptive or misleading claims.
 - Do not mention artificial intelligence.
-- Avoid repetition.
-- The narration must sound natural when spoken aloud.
-- The opening must be strong enough to keep the viewer watching.
+- Do not mention Gemini, OpenAI, ChatGPT or content automation.
+- Do not include production notes in the narration.
+- Do not use deceptive or misleading claims.
+- Avoid repetition, filler and generic introductions.
+- Start with a strong and honest viewer hook.
+- Narration must sound natural when spoken aloud.
+- Use clear punctuation for text-to-speech.
 - The title must be attractive but honest.
 - The description must be suitable for YouTube SEO.
 - Thumbnail text must contain no more than 5 words.
 - Tags must not contain the # symbol.
 - Hashtags must not contain the # symbol.
-- Visual keywords must be short English stock-video search phrases.
-- For children's content, keep the content safe, positive and age-appropriate.
+- Every scene must contain useful narration.
+- Every scene query must be a short English Pexels stock-video search phrase.
+- Do not put company names, trademarks or celebrity names in visual queries.
+- Do not request text, logos, screenshots or watermarks in visual queries.
+- Scene seconds must realistically match the narration length.
+- The script must represent the same narration as all scenes combined.
+- For children's content, remain safe, positive and age-appropriate.
+
+SCENE REQUIREMENTS
+{scene_instruction}
 
 RETURN THESE FIELDS
 - topic
@@ -138,7 +162,12 @@ RETURN THESE FIELDS
 - hashtags
 - thumbnail_text
 - script
-- visual_keywords
+- scenes
+
+Each scenes item must contain:
+- query: short English stock-video search phrase
+- narration: narration in {output_language}
+- seconds: estimated scene duration
 """.strip()
 
 
@@ -155,7 +184,8 @@ def extract_gemini_text(
 
         raise RuntimeError(
             "Gemini cavab namizədi qaytarmadı. "
-            f"Prompt feedback: {json.dumps(prompt_feedback, ensure_ascii=False)}"
+            f"Prompt feedback: "
+            f"{json.dumps(prompt_feedback, ensure_ascii=False)}"
         )
 
     content = (
@@ -187,6 +217,15 @@ def extract_gemini_text(
     return output_text
 
 
+def clean_text(value: Any) -> str:
+    return " ".join(
+        str(value or "")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .split()
+    ).strip()
+
+
 def generate_content(
     video: dict[str, Any],
 ) -> dict[str, Any]:
@@ -201,7 +240,7 @@ def generate_content(
             "hashtags",
             "thumbnail_text",
             "script",
-            "visual_keywords",
+            "scenes",
         ],
         "properties": {
             "topic": {
@@ -231,10 +270,27 @@ def generate_content(
             "script": {
                 "type": "string",
             },
-            "visual_keywords": {
+            "scenes": {
                 "type": "array",
                 "items": {
-                    "type": "string",
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "query",
+                        "narration",
+                        "seconds",
+                    ],
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                        },
+                        "narration": {
+                            "type": "string",
+                        },
+                        "seconds": {
+                            "type": "number",
+                        },
+                    },
                 },
             },
         },
@@ -270,11 +326,11 @@ def generate_content(
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "responseJsonSchema": schema,
-                "temperature": 0.8,
-                "maxOutputTokens": 12000,
+                "temperature": 0.75,
+                "maxOutputTokens": 16000,
             },
         },
-        timeout=180,
+        timeout=240,
     )
 
     if not response.ok:
@@ -287,7 +343,7 @@ def generate_content(
     output_text = extract_gemini_text(payload)
 
     try:
-        content = json.loads(output_text)
+        return json.loads(output_text)
     except json.JSONDecodeError as error:
         raise RuntimeError(
             "Gemini etibarlı JSON qaytarmadı. "
@@ -295,7 +351,87 @@ def generate_content(
             f"Cavabın əvvəli: {output_text[:500]}"
         ) from error
 
-    return content
+
+def normalize_content(
+    content: dict[str, Any],
+) -> dict[str, Any]:
+    raw_scenes = content.get("scenes") or []
+    scenes: list[dict[str, Any]] = []
+
+    for raw_scene in raw_scenes:
+        query = clean_text(
+            raw_scene.get("query")
+        )
+
+        narration = clean_text(
+            raw_scene.get("narration")
+        )
+
+        try:
+            seconds = float(
+                raw_scene.get("seconds") or 8
+            )
+        except (TypeError, ValueError):
+            seconds = 8.0
+
+        seconds = max(
+            3.0,
+            min(seconds, 45.0),
+        )
+
+        if not query or not narration:
+            continue
+
+        scenes.append(
+            {
+                "query": query[:120],
+                "narration": narration,
+                "seconds": round(seconds, 2),
+            }
+        )
+
+    if not scenes:
+        raise RuntimeError(
+            "Gemini etibarlı səhnə planı yaratmadı."
+        )
+
+    # Səs və görüntünün tam uyğun olması üçün əsas script
+    # səhnə narration-larından yenidən yaradılır.
+    script = "\n\n".join(
+        scene["narration"]
+        for scene in scenes
+    )
+
+    tags = [
+        clean_text(tag).lstrip("#")
+        for tag in content.get("tags", [])
+        if clean_text(tag)
+    ]
+
+    hashtags = [
+        clean_text(tag).lstrip("#")
+        for tag in content.get("hashtags", [])
+        if clean_text(tag)
+    ]
+
+    return {
+        "topic": clean_text(
+            content.get("topic")
+        ),
+        "title": clean_text(
+            content.get("title")
+        ),
+        "description": str(
+            content.get("description") or ""
+        ).strip(),
+        "tags": tags[:30],
+        "hashtags": hashtags[:15],
+        "thumbnail_text": clean_text(
+            content.get("thumbnail_text")
+        ),
+        "script": script,
+        "scenes": scenes,
+    }
 
 
 def main() -> None:
@@ -315,20 +451,10 @@ def main() -> None:
     video_id = video["id"]
 
     print("Video tapıldı:", video_id)
-    print(
-        "Kanal:",
-        video["channel"]["name"],
-    )
-    print(
-        "AI provider: Gemini"
-    )
-    print(
-        "Model:",
-        GEMINI_MODEL,
-    )
-    print(
-        "Mərhələ: Ssenari və metadata hazırlanır."
-    )
+    print("Kanal:", video["channel"]["name"])
+    print("AI provider: Gemini")
+    print("Model:", GEMINI_MODEL)
+    print("Mərhələ: Ssenari və səhnə planı hazırlanır.")
 
     update_video(
         supabase,
@@ -340,83 +466,35 @@ def main() -> None:
     )
 
     try:
-        content = generate_content(video)
+        generated = generate_content(video)
+        content = normalize_content(generated)
 
-        visual_keywords = [
-            str(keyword).strip()
-            for keyword in content.get(
-                "visual_keywords",
-                [],
-            )
-            if str(keyword).strip()
-        ]
-
-        scene_plan = [
-            {
-                "query": keyword,
-                "seconds": 8,
-            }
-            for keyword in visual_keywords[:30]
-        ]
-
-        tags = [
-            str(tag).strip()
-            for tag in content.get(
-                "tags",
-                [],
-            )
-            if str(tag).strip()
-        ]
-
-        hashtags = [
-            str(tag)
-            .strip()
-            .lstrip("#")
-            for tag in content.get(
-                "hashtags",
-                [],
-            )
-            if str(tag).strip()
-        ]
-
-        title = str(
-            content["title"]
-        ).strip()
-
-        description = str(
-            content["description"]
-        ).strip()
-
-        script = str(
-            content["script"]
-        ).strip()
-
-        topic = str(
-            content["topic"]
-        ).strip()
-
-        thumbnail_text = str(
-            content["thumbnail_text"]
-        ).strip()
-
-        if not script:
+        if not content["script"]:
             raise RuntimeError(
                 "Gemini ssenari yaratmadı."
+            )
+
+        if not content["title"]:
+            raise RuntimeError(
+                "Gemini başlıq yaratmadı."
             )
 
         update_video(
             supabase,
             video_id,
             {
-                "topic": topic,
-                "title": title[:100],
-                "description": description,
-                "tags": tags[:30],
-                "hashtags": hashtags[:15],
-                "thumbnail_text": thumbnail_text[:80],
-                "script": script,
-                "scene_plan": scene_plan,
+                "topic": content["topic"],
+                "title": content["title"][:100],
+                "description": content["description"],
+                "tags": content["tags"],
+                "hashtags": content["hashtags"],
+                "thumbnail_text": (
+                    content["thumbnail_text"][:80]
+                ),
+                "script": content["script"],
+                "scene_plan": content["scenes"],
                 "status": "generating",
+                "error_message": None,
             },
         )
 
@@ -430,35 +508,34 @@ def main() -> None:
                 "level": "info",
                 "type": "content_generated",
                 "message": (
-                    "Gemini ilə ssenari, başlıq və "
-                    "YouTube metadata-sı uğurla hazırlandı."
+                    "Gemini ilə ssenari, metadata və "
+                    "səhnə planı uğurla hazırlandı."
                 ),
                 "payload": {
                     "provider": "gemini",
                     "model": GEMINI_MODEL,
-                    "title": title,
-                    "topic": topic,
+                    "title": content["title"],
+                    "topic": content["topic"],
+                    "scene_count": len(
+                        content["scenes"]
+                    ),
                 },
             }
         ).execute()
 
+        print("Ssenari uğurla yaradıldı.")
+        print("Başlıq:", content["title"])
+        print("Mövzu:", content["topic"])
         print(
-            "Ssenari uğurla yaradıldı."
-        )
-        print(
-            "Başlıq:",
-            title,
-        )
-        print(
-            "Mövzu:",
-            topic,
+            "Səhnə sayı:",
+            len(content["scenes"]),
         )
         print(
             "Ssenari simvol sayı:",
-            len(script),
+            len(content["script"]),
         )
         print(
-            "Növbəti mərhələ: Səs hazırlanması."
+            "Növbəti mərhələ: Media və səs testi."
         )
 
     except Exception as error:
