@@ -291,13 +291,14 @@ def create_procedural_ambient_audio(
     duration: float,
 ) -> None:
     """
-    Hazır mahnı və üçüncü tərəf musiqisi istifadə etmir.
+    Hazır mahnı istifadə etmir.
 
-    FFmpeg ilə sıfırdan yumşaq ambient akkord yaradır:
-    - xışıltı və pink noise yoxdur;
-    - üç sakit sinus tonu istifadə olunur;
-    - yumşaq echo və fade əlavə edilir;
-    - müəllif hüququ riski olan hazır musiqi istifadə edilmir.
+    FFmpeg ilə sıfırdan eşidilən, yumşaq ambient akkord yaradır:
+    - xışıltı yoxdur;
+    - üç harmonik ton var;
+    - səs çox zəif qalmır;
+    - başlanğıc və son yumşaqdır;
+    - üçüncü tərəf musiqisi istifadə edilmir.
     """
 
     fade_out_start = max(
@@ -310,18 +311,29 @@ def create_procedural_ambient_audio(
             "ffmpeg",
             "-y",
 
-            # Aşağı əsas ton
+            # Aşağı ambient ton
             "-f",
             "lavfi",
             "-i",
             (
                 "sine="
-                "frequency=174:"
+                "frequency=130.81:"
                 f"duration={duration:.3f}:"
                 "sample_rate=48000"
             ),
 
-            # Yumşaq orta ton
+            # Orta ambient ton
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=196.00:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
+            # Yuxarı harmonik ton
             "-f",
             "lavfi",
             "-i",
@@ -332,53 +344,48 @@ def create_procedural_ambient_audio(
                 "sample_rate=48000"
             ),
 
-            # Zəif yüksək harmonik ton
-            "-f",
-            "lavfi",
-            "-i",
-            (
-                "sine="
-                "frequency=329.63:"
-                f"duration={duration:.3f}:"
-                "sample_rate=48000"
-            ),
-
             "-filter_complex",
             (
-                # Əsas ton
+                # Əsas ton daha aydın eşidilir
                 "[0:a]"
-                "volume=0.040,"
-                "lowpass=f=700"
+                "volume=0.20,"
+                "lowpass=f=500"
                 "[tone1];"
 
                 # Orta ton
                 "[1:a]"
-                "volume=0.022,"
-                "lowpass=f=900"
+                "volume=0.12,"
+                "lowpass=f=700"
                 "[tone2];"
 
-                # Yuxarı harmonik
+                # Yuxarı ton
                 "[2:a]"
-                "volume=0.010,"
-                "lowpass=f=1200"
+                "volume=0.07,"
+                "lowpass=f=900"
                 "[tone3];"
 
-                # Tonları birləşdirir
+                # Tonlar birləşdirilir
                 "[tone1][tone2][tone3]"
                 "amix=inputs=3:"
                 "duration=longest:"
                 "normalize=0,"
 
-                # Yumşaq genişlik və əks-səda
-                "aecho=0.7:0.35:900|1800:0.16|0.08,"
+                # Yumşaq əks-səda
+                "aecho="
+                "in_gain=0.75:"
+                "out_gain=0.65:"
+                "delays=700|1400:"
+                "decays=0.22|0.10,"
 
-                # Başlanğıcı və sonu yumşaldır
-                "afade=t=in:st=0:d=6,"
+                # Başlanğıc və son yumşaldılır
+                "afade=t=in:st=0:d=5,"
                 f"afade=t=out:st={fade_out_start:.3f}:d=6,"
 
-                # Ümumi səs səviyyəsi
-                "volume=1.8,"
-                "loudnorm=I=-25:LRA=7:TP=-3"
+                # Səsin həddən artıq yüksəlməsinin qarşısını alır
+                "alimiter=limit=0.75,"
+
+                # Son ümumi səviyyə
+                "volume=1.7"
                 "[ambient]"
             ),
 
@@ -386,6 +393,10 @@ def create_procedural_ambient_audio(
             "[ambient]",
             "-t",
             f"{duration:.3f}",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
             "-c:a",
             "libmp3lame",
             "-b:a",
@@ -393,6 +404,14 @@ def create_procedural_ambient_audio(
             str(output_path),
         ]
     )
+
+    if (
+        not output_path.exists()
+        or output_path.stat().st_size < 10_000
+    ):
+        raise RuntimeError(
+            "Ambient audio yaradılmadı və ya fayl boşdur."
+        )
 
 
 def download_file(url: str, destination: Path) -> None:
