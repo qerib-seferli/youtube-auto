@@ -1,6 +1,6 @@
 supabase==2.18.1
 requests==2.32.4
-edge-tts==7.0.2
+edge-tts==7.2.8
 cryptography==45.0.5
 google-api-python-client==2.176.0
 google-auth==2.40.3
