@@ -291,20 +291,18 @@ def create_procedural_ambient_audio(
     duration: float,
 ) -> None:
     """
-    Heç bir hazır musiqidən istifadə etmir.
+    Hazır mahnı və üçüncü tərəf musiqisi istifadə etmir.
 
-    FFmpeg vasitəsilə sıfırdan:
-    - yumşaq pink noise;
-    - aşağı tezlikli ambient ton;
-    - yüngül yüksək ambient ton yaradılır.
-
-    Hazır mahnı və ya üçüncü tərəf audio faylı istifadə edilmədiyi
-    üçün başqa şəxsin musiqisini kopyalamır.
+    FFmpeg ilə sıfırdan yumşaq ambient akkord yaradır:
+    - xışıltı və pink noise yoxdur;
+    - üç sakit sinus tonu istifadə olunur;
+    - yumşaq echo və fade əlavə edilir;
+    - müəllif hüququ riski olan hazır musiqi istifadə edilmir.
     """
 
     fade_out_start = max(
         0.0,
-        duration - 5.0,
+        duration - 6.0,
     )
 
     run(
@@ -312,19 +310,7 @@ def create_procedural_ambient_audio(
             "ffmpeg",
             "-y",
 
-            # Yumşaq fon səsi
-            "-f",
-            "lavfi",
-            "-i",
-            (
-                "anoisesrc="
-                "color=pink:"
-                "amplitude=0.018:"
-                f"duration={duration:.3f}:"
-                "sample_rate=48000"
-            ),
-
-            # Aşağı və sakit ambient ton
+            # Aşağı əsas ton
             "-f",
             "lavfi",
             "-i",
@@ -335,7 +321,7 @@ def create_procedural_ambient_audio(
                 "sample_rate=48000"
             ),
 
-            # Çox zəif əlavə harmonik ton
+            # Yumşaq orta ton
             "-f",
             "lavfi",
             "-i",
@@ -346,37 +332,53 @@ def create_procedural_ambient_audio(
                 "sample_rate=48000"
             ),
 
+            # Zəif yüksək harmonik ton
+            "-f",
+            "lavfi",
+            "-i",
+            (
+                "sine="
+                "frequency=329.63:"
+                f"duration={duration:.3f}:"
+                "sample_rate=48000"
+            ),
+
             "-filter_complex",
             (
-                # Pink noise yumşaldılır
+                # Əsas ton
                 "[0:a]"
-                "highpass=f=55,"
-                "lowpass=f=900,"
-                "volume=0.30"
-                "[noise];"
-
-                # Aşağı ton çox zəif səviyyəyə salınır
-                "[1:a]"
-                "volume=0.022"
+                "volume=0.040,"
+                "lowpass=f=700"
                 "[tone1];"
 
-                # İkinci ton daha da zəiflədilir
-                "[2:a]"
-                "volume=0.012"
+                # Orta ton
+                "[1:a]"
+                "volume=0.022,"
+                "lowpass=f=900"
                 "[tone2];"
 
-                # Üç səs birləşdirilir
-                "[noise][tone1][tone2]"
+                # Yuxarı harmonik
+                "[2:a]"
+                "volume=0.010,"
+                "lowpass=f=1200"
+                "[tone3];"
+
+                # Tonları birləşdirir
+                "[tone1][tone2][tone3]"
                 "amix=inputs=3:"
                 "duration=longest:"
                 "normalize=0,"
 
-                # Başlanğıc və son yumşaldılır
-                "afade=t=in:st=0:d=4,"
-                f"afade=t=out:st={fade_out_start:.3f}:d=5,"
+                # Yumşaq genişlik və əks-səda
+                "aecho=0.7:0.35:900|1800:0.16|0.08,"
 
-                # Ümumi səs səviyyəsi tənzimlənir
-                "loudnorm=I=-24:LRA=7:TP=-2"
+                # Başlanğıcı və sonu yumşaldır
+                "afade=t=in:st=0:d=6,"
+                f"afade=t=out:st={fade_out_start:.3f}:d=6,"
+
+                # Ümumi səs səviyyəsi
+                "volume=1.8,"
+                "loudnorm=I=-25:LRA=7:TP=-3"
                 "[ambient]"
             ),
 
