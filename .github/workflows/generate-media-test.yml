@@ -8,17 +8,20 @@ permissions:
 
 jobs:
   generate-media:
-    name: Generate voice, visuals and test video
+    name: Səs, görüntü və test videosu yarat
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
-      # İlk test vaxt itirməsin deyə maksimum 8 səhnə.
       MAX_MEDIA_TEST_SCENES: "8"
+
+      # 120 = 2 dəqiqəlik meditasiya testi.
+      # Sonra 600 yazaraq 10 dəqiqə edə bilərsən.
+      MEDITATION_TEST_SECONDS: "120"
 
       MEDIA_OUTPUT_DIR: media-test-output
 
@@ -35,10 +38,7 @@ jobs:
       - name: FFmpeg və fontları quraşdır
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ffmpeg \
-            fonts-dejavu-core \
-            libass9
+          sudo apt-get install -y             ffmpeg             fonts-dejavu-core             libass9
 
       - name: Python paketlərini quraşdır
         run: |
@@ -46,10 +46,9 @@ jobs:
           pip install -r worker/requirements.txt
 
       - name: Edge TTS versiyasını yoxla
-        shell: bash
         run: |
           python -c "import importlib.metadata; print('edge-tts:', importlib.metadata.version('edge-tts'))"
-          
+
       - name: Secret-ləri yoxla
         shell: bash
         run: |
@@ -69,10 +68,10 @@ jobs:
           echo "Bütün media secret-ləri mövcuddur."
 
       - name: FFmpeg imkanlarını yoxla
-        shell: bash
         run: |
           ffmpeg -version
           ffmpeg -filters | grep subtitles
+          ffmpeg -sources lavfi >/dev/null
 
       - name: Səs, görüntü və test videosu yarat
         run: python worker/generate_media.py
@@ -81,11 +80,7 @@ jobs:
         if: success()
         shell: bash
         run: |
-          echo "Yaradılmış fayllar:"
-          find media-test-output \
-            -maxdepth 2 \
-            -type f \
-            -printf "%p %k KB\n"
+          find media-test-output             -maxdepth 2             -type f             -printf "%p %k KB\n"
 
       - name: Test videosunu artifact kimi saxla
         if: success()
